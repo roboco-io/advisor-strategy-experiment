@@ -44,7 +44,9 @@ class Advisor:
             fallbacks=[{"model": models.OPUS}],
             messages=[{"role": "user", "content": prompt}],
         )
-        self.metrics.add_usage(self.model, resp.usage)
+        served = getattr(resp, "model", None)
+        served = served if served in models.PRICES else self.model
+        self.metrics.add_usage(served, resp.usage)
         if resp.stop_reason == "refusal":
             category = getattr(getattr(resp, "stop_details", None), "category", None)
             self.metrics.note_refusal(category)

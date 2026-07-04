@@ -63,6 +63,17 @@ def test_consult_handles_refusal():
     assert m.refusals == ["cyber"]
 
 
+def test_consult_attributes_usage_to_fallback_served_model():
+    class FallbackServed(FakeResp):
+        model = "claude-opus-4-8"
+
+    m = RunMetrics(arm="haiku+fable")
+    adv = Advisor(FakeClient(FallbackServed()), m)
+    adv.consult("How to start?", context="empty repo")
+    assert m.by_model["claude-opus-4-8"]["calls"] == 1
+    assert "claude-fable-5" not in m.by_model
+
+
 def test_tool_def():
     assert CONSULT_ADVISOR_TOOL["name"] == "consult_advisor"
     assert "question" in CONSULT_ADVISOR_TOOL["input_schema"]["properties"]
