@@ -1,6 +1,7 @@
 """Anthropic 정의 bash/text_editor 도구의 client-side 샌드박스 실행."""
 from __future__ import annotations
 import os
+import signal
 import subprocess
 
 BASH_TOOL = {"type": "bash_20250124", "name": "bash"}
@@ -23,14 +24,21 @@ class Sandbox:
         if inp.get("restart"):
             return "bash session restarted"
         cmd = inp["command"]
+        proc = subprocess.Popen(
+            cmd, shell=True, cwd=self.workdir, start_new_session=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
         try:
-            p = subprocess.run(
-                cmd, shell=True, cwd=self.workdir, capture_output=True,
-                text=True, timeout=self.timeout,
-            )
-            return (p.stdout + p.stderr)[:20000] or "(no output)"
+            out, _ = proc.communicate(timeout=self.timeout)
+            result = out[:20000] or "(no output)"
         except subprocess.TimeoutExpired:
-            return f"error: command timed out after {self.timeout}s"
+            result = f"error: command timed out after {self.timeout}s"
+        finally:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        return result
 
     def edit(self, inp: dict) -> str:
         cmd = inp["command"]

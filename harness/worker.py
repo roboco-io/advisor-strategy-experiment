@@ -12,6 +12,22 @@ WORKER_SYSTEM = (
 )
 
 
+def _call_worker(client, worker_model, messages, base_kwargs, metrics):
+    if worker_model == models.FABLE:
+        resp = client.beta.messages.create(
+            messages=messages,
+            betas=["server-side-fallback-2026-06-01"],
+            fallbacks=[{"model": models.OPUS}],
+            **base_kwargs,
+        )
+    else:
+        resp = client.messages.create(messages=messages, **base_kwargs)
+    served = getattr(resp, "model", None)
+    served = served if served in models.PRICES else worker_model
+    metrics.add_usage(served, resp.usage)
+    return resp
+
+
 def run_worker(
     client, worker_model, sandbox, metrics, spec,
     advisor=None, max_turns: int = 50, max_advisor_calls: int = 3,
@@ -24,19 +40,30 @@ def run_worker(
     final_text = ""
     advisor_used = 0
 
-    base_kwargs = {"model": worker_model, "max_tokens": 8000, "system": WORKER_SYSTEM, "tools": tool_defs}
+    base_kwargs = {"model": worker_model, "max_tokens": 16000, "system": WORKER_SYSTEM, "tools": tool_defs}
     if worker_model == models.SONNET:
         base_kwargs["output_config"] = {"effort": "high"}
 
     for _ in range(max_turns):
-        resp = client.messages.create(messages=messages, **base_kwargs)
+        resp = _call_worker(client, worker_model, messages, base_kwargs, metrics)
         metrics.note_turn()
-        metrics.add_usage(worker_model, resp.usage)
         messages.append({"role": "assistant", "content": resp.content})
 
         final_text = "".join(
             b.text for b in resp.content if getattr(b, "type", None) == "text"
         ) or final_text
+
+        if resp.stop_reason == "refusal":
+            cat = getattr(getattr(resp, "stop_details", None), "category", None)
+            metrics.note_refusal(cat)
+            break
+
+        if resp.stop_reason in ("end_turn", "stop_sequence"):
+            break
+
+        if resp.stop_reason == "max_tokens":
+            messages.append({"role": "user", "content": "Continue."})
+            continue
 
         if resp.stop_reason != "tool_use":
             break
