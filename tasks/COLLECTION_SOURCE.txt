@@ -1,0 +1,1 @@
+gothinkster/realworld api/Conduit.postman_collection.json @ e7ab92bba08ba93ed322f50fd33b2857c183a0cf (legacy Postman, Newman-compatible)
