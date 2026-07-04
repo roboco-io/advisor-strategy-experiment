@@ -8,7 +8,7 @@ import time
 
 from harness import models, grade
 from harness.metrics import RunMetrics
-from harness.worker import run_worker
+from harness.worker import run_worker, run_delegator
 
 ARMS = [
     {"key": "haiku-solo", "worker": models.HAIKU, "advisor": None},
@@ -16,6 +16,8 @@ ARMS = [
     {"key": "fable-solo", "worker": models.FABLE, "advisor": None},
     {"key": "haiku+fable", "worker": models.HAIKU, "advisor": models.FABLE},
     {"key": "sonnet+fable", "worker": models.SONNET, "advisor": models.FABLE},
+    {"key": "opus-solo", "worker": models.OPUS, "advisor": None},
+    {"key": "deleg-opus", "worker": models.OPUS, "advisor": models.SONNET, "mode": "delegate"},
 ]
 
 
@@ -26,7 +28,12 @@ def _use_subscription() -> None:
 
 def _drive_worker(arm, workdir, spec, metrics, max_turns) -> None:
     """라이브 worker를 동기적으로 구동(테스트에서 monkeypatch 대상)."""
-    asyncio.run(run_worker(arm["worker"], arm["advisor"], workdir, spec, metrics, max_turns))
+    if arm.get("mode") == "delegate":
+        asyncio.run(
+            run_delegator(arm["advisor"], arm["worker"], workdir, spec, metrics, max_turns)
+        )
+    else:
+        asyncio.run(run_worker(arm["worker"], arm["advisor"], workdir, spec, metrics, max_turns))
 
 
 def run_arm(arm, spec, collection_path, results_dir,
@@ -38,8 +45,9 @@ def run_arm(arm, spec, collection_path, results_dir,
 
     start = time.monotonic()
     _drive_worker(arm, workdir, spec, metrics, max_turns)
-    # 어떤 arm도 opus를 worker/advisor로 쓰지 않으므로, opus 사용량 = fallback 발동.
-    metrics.fallback_used = models.OPUS in metrics.by_model
+    # opus를 의도적으로 쓰는 arm(opus-solo/deleg-opus)이 아니면, opus 사용량 = Fable fallback 발동.
+    intends_opus = arm["worker"] == models.OPUS or arm.get("mode") == "delegate"
+    metrics.fallback_used = (models.OPUS in metrics.by_model) and not intends_opus
     metrics.grade = grade_fn(workdir, collection_path)
     metrics.wall_clock_s = time.monotonic() - start
 

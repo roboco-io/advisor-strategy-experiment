@@ -4,11 +4,32 @@ from harness import models
 
 def test_arms_defined():
     keys = {a["key"] for a in R.ARMS}
-    assert keys == {"haiku-solo", "sonnet-solo", "fable-solo", "haiku+fable", "sonnet+fable"}
+    assert keys == {"haiku-solo", "sonnet-solo", "fable-solo", "haiku+fable",
+                    "sonnet+fable", "opus-solo", "deleg-opus"}
     hf = next(a for a in R.ARMS if a["key"] == "haiku+fable")
     assert hf["worker"] == models.HAIKU and hf["advisor"] == models.FABLE
     hs = next(a for a in R.ARMS if a["key"] == "haiku-solo")
     assert hs["advisor"] is None
+
+
+def test_opus_and_delegate_arms_defined():
+    osolo = next(a for a in R.ARMS if a["key"] == "opus-solo")
+    assert osolo["worker"] == models.OPUS and osolo["advisor"] is None
+    dg = next(a for a in R.ARMS if a["key"] == "deleg-opus")
+    assert dg["worker"] == models.OPUS and dg["advisor"] == models.SONNET
+    assert dg["mode"] == "delegate"
+
+
+def test_drive_worker_routes_delegate(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(R, "run_delegator",
+                        lambda *a, **k: calls.setdefault("deleg", a) or None)
+    monkeypatch.setattr(R, "run_worker",
+                        lambda *a, **k: calls.setdefault("solo", a) or None)
+    monkeypatch.setattr(R.asyncio, "run", lambda coro: coro)  # 코루틴 미실행, 라우팅만 검증
+    dg = next(a for a in R.ARMS if a["key"] == "deleg-opus")
+    R._drive_worker(dg, "/tmp/wd", "spec", object(), 10)
+    assert "deleg" in calls and "solo" not in calls
 
 
 def test_run_arm_end_to_end(tmp_path, monkeypatch):

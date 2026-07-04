@@ -45,6 +45,18 @@ def _mu(model, out=50):
                     "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0}}
 
 
+def test_build_delegator_options():
+    o = W.build_delegator_options(models.SONNET, models.OPUS, "/tmp/wd", max_turns=40)
+    assert o.model == "sonnet"
+    assert o.cwd == "/tmp/wd"
+    assert o.permission_mode == "bypassPermissions"
+    assert o.setting_sources == []
+    assert "Agent" in o.allowed_tools  # Advisor는 위임
+    assert "Skill" in o.disallowed_tools
+    assert "worker" in o.agents  # Opus 구현 서브에이전트
+    assert o.agents["worker"].model == "opus"
+
+
 def test_accumulate_separates_worker_and_advisor():
     m = RunMetrics(arm="haiku+fable")
     W._accumulate(m, FakeResult(_mu("claude-haiku-4-5-20251001"), num_turns=7, cost=0.2), is_worker=True)

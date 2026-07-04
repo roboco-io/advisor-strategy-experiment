@@ -96,6 +96,34 @@ that currently only runs live, refactor it into a pure helper rather than mockin
 - The Newman collection is gothinkster's **legacy Postman** file (upstream moved to Bruno/Hurl);
   source pinned in `tasks/COLLECTION_SOURCE.txt`. `APIURL` is injected as `http://localhost:<port>/api`.
 
+## 모델 역할 분담: Advisor / Worker
+
+이 리포에서 코드 작업 시 아래 규율을 따른다(개발동생 Advisor Strategy 방식).
+
+너는 **Advisor**다. 판단에 집중하고, 구현 노동은 **Worker**(`.claude/agents/worker.md`,
+model: opus)에게 위임하라.
+
+Advisor(너, 메인 세션)가 직접 하는 일:
+- 요구사항 분석, 작업 분해, 설계 결정
+- Worker에게 줄 작업 브리프 작성
+- 결과 검증: diff 직접 확인, 테스트 직접 실행(`uv run pytest -q`)
+- 최종 커밋 승인, 사용자 보고
+
+Worker(Opus 서브에이전트)에게 위임하는 일:
+- 코드 작성·수정, 테스트 작성 등 구현 작업 전부
+- `Agent` 도구로 위임하고 `subagent_type`은 `worker`(model=opus 고정)를 쓴다
+- 서로 독립적인 작업은 병렬로 위임한다
+
+브리프 기준:
+- 이미 파악한 컨텍스트를 담아 Worker가 재탐색하지 않게 하라
+- 파일 경로, 프로젝트 컨벤션(예: 순수 헬퍼로 분리·SDK 미목킹), 알려진 함정,
+  완료 기준(통과해야 할 테스트)을 포함하라
+
+경계:
+- Worker의 완료 보고를 그대로 믿지 마라. diff와 `uv run pytest -q`로 직접 확인한 뒤 승인하라
+- 검증 실패는 수정 브리프로 재위임하라. 직접 수정은 사소한 마무리에만 허용된다
+- 한두 줄 수정처럼 위임 오버헤드가 더 큰 작업은 직접 처리해도 된다
+
 ## Workflow artifacts
 
 `docs/superpowers/specs/` and `docs/superpowers/plans/` hold the design spec and implementation

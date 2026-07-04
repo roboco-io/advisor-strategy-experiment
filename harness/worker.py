@@ -7,6 +7,7 @@ from claude_agent_sdk import (
     query,
     ClaudeSDKClient,
     ClaudeAgentOptions,
+    AgentDefinition,
     AssistantMessage,
     ResultMessage,
 )
@@ -141,3 +142,64 @@ async def run_worker(worker_model, advisor_model, workdir, spec, metrics, max_tu
             )
             await worker.query(WORKER_CONTINUE.format(advice=advice))
             last = await _drain_turn(worker, metrics)
+
+
+# === Delegation ("develop-junior") variant ===
+# Advisor(Sonnet)가 루프를 소유하고, 구현은 Opus worker 서브에이전트에 Agent 도구로 위임한 뒤
+# curl로 직접 검증한다. 구현은 서브에이전트가 하므로 Advisor는 Write/Edit를 갖지 않는다.
+
+DELEG_WORKER_PROMPT = (
+    "You are the implementation worker. Build the actual source files and run the server "
+    "yourself with the Bash/Write/Edit tools. Stay strictly inside the given working "
+    "directory — never use /tmp, the home directory, or any external path. Keep working "
+    "until the endpoints run and the server responds."
+)
+
+DELEGATOR_INSTRUCTIONS = (
+    "You are the Advisor and you OWN this loop. Do NOT implement anything yourself: delegate "
+    "all implementation to the `worker` subagent (Opus) via the `Agent` tool. Instruct the "
+    "worker to do all work strictly inside the working directory `{workdir}` — forbid /tmp, "
+    "the home directory, and any external path; the grader runs `npm start` from there. "
+    "When the worker reports back, verify it YOURSELF by running "
+    "`curl -s http://localhost:${{PORT:-3000}}/api/tags`; if that does not return a JSON body, "
+    "write a corrective brief and re-delegate to the worker until it does.\n\n"
+    "=== RealWorld API spec ===\n{spec}"
+)
+
+
+def build_delegator_options(
+    advisor_model, worker_model, workdir, max_turns: int = 40
+) -> ClaudeAgentOptions:
+    """루프 오너(Advisor) 세션 옵션. Advisor는 위임(Agent)·검증(Bash/Read/Grep/Glob)만,
+    구현(Write/Edit)은 worker 서브에이전트가 수행."""
+    return ClaudeAgentOptions(
+        model=models.ALIAS.get(advisor_model, advisor_model),
+        cwd=str(workdir),
+        permission_mode="bypassPermissions",
+        max_turns=max_turns,
+        setting_sources=[],
+        allowed_tools=["Agent", "Bash", "Read", "Grep", "Glob"],
+        disallowed_tools=["Skill"],
+        agents={
+            "worker": AgentDefinition(
+                description="Opus implementation worker",
+                prompt=DELEG_WORKER_PROMPT,
+                tools=list(BASE_TOOLS),
+                model=models.ALIAS.get(worker_model, worker_model),
+                permissionMode="bypassPermissions",
+            )
+        },
+    )
+
+
+async def run_delegator(
+    advisor_model, worker_model, workdir, spec, metrics, max_turns: int = 40
+) -> None:
+    """위임 루프. Advisor(Sonnet)가 Opus worker 서브에이전트에 구현을 위임하고 curl로 검증.
+    worker 서브에이전트 사용량은 ResultMessage.model_usage에 모델별로 집계된다."""
+    opts = build_delegator_options(advisor_model, worker_model, workdir, max_turns)
+    async with ClaudeSDKClient(options=opts) as worker:
+        await worker.query(
+            DELEGATOR_INSTRUCTIONS.format(workdir=str(workdir), spec=spec)
+        )
+        await _drain_turn(worker, metrics)
