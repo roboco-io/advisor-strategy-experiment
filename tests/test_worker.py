@@ -13,6 +13,10 @@ def test_build_options_solo():
     assert "Bash" in o.allowed_tools
     assert "Agent" not in o.allowed_tools
     assert not o.agents  # None 또는 빈 dict
+    # 호스트 스킬/전역 CLAUDE.md 격리 + 기획 스킬·위임 차단
+    assert o.setting_sources == []
+    assert "Skill" in o.disallowed_tools
+    assert "Agent" in o.disallowed_tools  # solo는 위임 금지
 
 
 def test_build_options_advisor_arm():
@@ -22,6 +26,9 @@ def test_build_options_advisor_arm():
     assert o.agents["advisor"].model == "fable"
     assert o.agents["advisor"].tools == []
     assert o.fallback_model is None  # sonnet worker는 fallback 불필요
+    assert o.setting_sources == []
+    assert "Skill" in o.disallowed_tools
+    assert "Agent" not in o.disallowed_tools  # advisor arm은 위임 허용
 
 
 def test_build_options_fable_worker_sets_fallback():
