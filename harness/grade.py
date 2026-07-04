@@ -28,6 +28,23 @@ def _load_report(path: str) -> dict | None:
         return None
 
 
+def _free_port(port: int) -> None:
+    """해당 포트를 LISTEN 중인 프로세스를 종료(직전 arm/worker의 잔여 서버 제거).
+
+    다중 arm 실행 시 이전 arm의 서버가 포트를 점유해 다음 arm 채점을 오염시키는 것을 방지.
+    """
+    try:
+        out = subprocess.run(f"lsof -ti tcp:{port} -sTCP:LISTEN", shell=True,
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:  # noqa: BLE001
+        return
+    for pid in out.split():
+        try:
+            os.kill(int(pid), signal.SIGKILL)
+        except (ProcessLookupError, ValueError):
+            pass
+
+
 def _wait_health(port: int, timeout: int) -> bool:
     url = f"http://localhost:{port}/api/tags"
     deadline = time.time() + timeout
@@ -42,6 +59,7 @@ def _wait_health(port: int, timeout: int) -> bool:
 
 def grade(workdir, collection_path, port=3000, boot_cmd="npm start", boot_timeout=30) -> dict:
     fail = {"server_ok": False, "total": 0, "passed": 0, "failures": ["server did not boot"]}
+    _free_port(port)  # worker/직전 arm의 잔여 서버 제거 후 깨끗이 부팅
     env = {**os.environ, "PORT": str(port)}
     subprocess.run("npm install", shell=True, cwd=workdir, env=env,
                    capture_output=True, text=True, timeout=300)
@@ -74,3 +92,4 @@ def grade(workdir, collection_path, port=3000, boot_cmd="npm start", boot_timeou
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except ProcessLookupError:
                 pass
+        _free_port(port)  # 채점 후 포트 확실히 해제(다음 arm 대비)
