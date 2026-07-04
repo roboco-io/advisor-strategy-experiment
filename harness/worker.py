@@ -15,13 +15,17 @@ from harness.advisor import advisor_agent
 BASE_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
 
 WORKER_INSTRUCTIONS = (
-    "Build a RealWorld (Conduit) backend API in Node.js + Express + SQLite in the current "
-    "working directory, NOW. Do not write a plan or ask questions — write the actual source "
-    "files and run the server yourself using the Bash/Write/Edit tools. Create package.json "
-    "with a `start` script, install dependencies (`npm install`), implement the endpoints, "
-    "and start the server listening on `process.env.PORT || 3000`. {advisor_hint}Keep working "
-    "until `curl -s http://localhost:${{PORT:-3000}}/api/tags` returns a JSON body — only then "
-    "stop. Do NOT stop after merely planning or scaffolding.\n\n=== RealWorld API spec ===\n{spec}"
+    "Build a RealWorld (Conduit) backend API in Node.js + Express + SQLite, NOW. "
+    "Your working directory is: {workdir}\n"
+    "ALL files and commands MUST be inside that directory. Use relative paths (or that exact "
+    "absolute path). Do NOT use /tmp, your home directory, or any path outside it, and do NOT "
+    "`cd` elsewhere — grade tooling runs `npm start` from that directory.\n"
+    "Do not write a plan or ask questions — write the actual source files and run the server "
+    "yourself using the Bash/Write/Edit tools. Create package.json with a `start` script, "
+    "install dependencies (`npm install`), implement the endpoints, and start the server "
+    "listening on `process.env.PORT || 3000`. {advisor_hint}Keep working until "
+    "`curl -s http://localhost:${{PORT:-3000}}/api/tags` returns a JSON body — only then stop. "
+    "Do NOT stop after merely planning or scaffolding.\n\n=== RealWorld API spec ===\n{spec}"
 )
 
 ADVISOR_HINT = (
@@ -35,7 +39,7 @@ def build_options(worker_model, advisor_model, workdir, max_turns: int = 60) -> 
     tools = list(BASE_TOOLS)
     # 호스트의 skills/plugins/전역 CLAUDE.md를 상속하지 않도록 격리(setting_sources=[]).
     # 기획 스킬로 이탈하지 않게 Skill/SlashCommand 차단.
-    disallowed = ["Skill", "SlashCommand"]
+    disallowed = ["Skill"]
     kwargs = {
         "cwd": str(workdir),
         "model": models.ALIAS.get(worker_model, worker_model),
@@ -80,7 +84,7 @@ async def run_worker(worker_model, advisor_model, workdir, spec, metrics, max_tu
     """라이브 executor 루프. arm당 1회 호출. (외부 SDK 의존 — 단위 테스트 제외)"""
     options = build_options(worker_model, advisor_model, workdir, max_turns)
     hint = ADVISOR_HINT if advisor_model is not None else ""
-    prompt = WORKER_INSTRUCTIONS.format(advisor_hint=hint, spec=spec)
+    prompt = WORKER_INSTRUCTIONS.format(advisor_hint=hint, spec=spec, workdir=str(workdir))
 
     advisor_calls = 0
     async for message in query(prompt=prompt, options=options):
