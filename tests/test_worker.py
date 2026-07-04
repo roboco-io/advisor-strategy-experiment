@@ -1,78 +1,61 @@
 from harness import worker as W
 from harness import models
 from harness.metrics import RunMetrics
-from claude_agent_sdk import ToolUseBlock
 
 
-def test_build_options_solo():
-    o = W.build_options(models.HAIKU, None, "/tmp/wd", max_turns=42)
+def test_build_worker_options_solo():
+    o = W.build_worker_options(models.HAIKU, "/tmp/wd", max_turns=40)
     assert o.model == "haiku"
     assert o.cwd == "/tmp/wd"
     assert o.permission_mode == "bypassPermissions"
-    assert o.max_turns == 42
-    assert "Bash" in o.allowed_tools
-    assert "Agent" not in o.allowed_tools
-    assert not o.agents  # None 또는 빈 dict
-    # 호스트 스킬/전역 CLAUDE.md 격리 + 기획 스킬·위임 차단
-    assert o.setting_sources == []
+    assert o.setting_sources == []  # 호스트 스킬/CLAUDE.md 격리
+    assert {"Bash", "Read", "Write", "Edit", "Glob", "Grep"}.issubset(set(o.allowed_tools))
     assert "Skill" in o.disallowed_tools
-    assert "Agent" in o.disallowed_tools  # solo는 위임 금지
+    assert "Agent" in o.disallowed_tools  # 위임 차단(advisor는 하니스가 주입)
+    assert o.fallback_model is None
 
 
-def test_build_options_advisor_arm():
-    o = W.build_options(models.SONNET, models.FABLE, "/tmp/wd")
-    assert o.model == "sonnet"
-    assert "Agent" in o.allowed_tools
-    assert o.agents["advisor"].model == "fable"
-    assert o.agents["advisor"].tools == []
-    assert o.fallback_model is None  # sonnet worker는 fallback 불필요
-    assert o.setting_sources == []
-    assert "Skill" in o.disallowed_tools
-    assert "Agent" not in o.disallowed_tools  # advisor arm은 위임 허용
-
-
-def test_build_options_fable_worker_sets_fallback():
-    o = W.build_options(models.FABLE, None, "/tmp/wd")
+def test_build_worker_options_fable_fallback():
+    o = W.build_worker_options(models.FABLE, "/tmp/wd")
     assert o.model == "fable"
-    assert o.fallback_model == "opus"  # Fable refusal 대비
+    assert o.fallback_model == "opus"
 
 
-def test_is_advisor_call():
-    yes = ToolUseBlock(id="t1", name="Agent", input={"subagent_type": "advisor"})
-    other = ToolUseBlock(id="t2", name="Agent", input={"subagent_type": "worker"})
-    bash = ToolUseBlock(id="t3", name="Bash", input={"command": "ls"})
-    assert W.is_advisor_call(yes)
-    assert not W.is_advisor_call(other)
-    assert not W.is_advisor_call(bash)
+def test_build_advisor_options():
+    o = W.build_advisor_options(models.FABLE)
+    assert o.model == "fable"
+    assert o.allowed_tools == []
+    assert o.system_prompt == W.ADVISOR_SYSTEM
+    assert o.setting_sources == []
+    assert o.max_turns == 1
+    assert o.fallback_model == "opus"
 
 
 class FakeResult:
-    model_usage = {
-        "claude-haiku-4-5-20251001": {
-            "inputTokens": 100, "outputTokens": 50,
-            "cacheReadInputTokens": 0, "cacheCreationInputTokens": 200,
-        }
-    }
-    num_turns = 7
-    total_cost_usd = 0.12
-    is_error = False
+    def __init__(self, model_usage, num_turns=5, cost=0.1, is_error=False, subtype="success"):
+        self.model_usage = model_usage
+        self.num_turns = num_turns
+        self.total_cost_usd = cost
+        self.is_error = is_error
+        self.subtype = subtype
 
 
-def test_record_result_maps_model_usage():
-    m = RunMetrics(arm="haiku-solo")
-    W.record_result(m, FakeResult())
-    assert m.worker_turns == 7
-    assert abs(m.sdk_cost_usd - 0.12) < 1e-9
-    assert m.by_model["claude-haiku-4-5"]["input_tokens"] == 100
-    assert m.by_model["claude-haiku-4-5"]["output_tokens"] == 50
-    assert m.total_cost > 0
+def _mu(model, out=50):
+    return {model: {"inputTokens": 100, "outputTokens": out,
+                    "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0}}
 
 
-def test_record_result_error_records_refusal():
-    class Err(FakeResult):
-        is_error = True
-        subtype = "error_max_turns"
+def test_accumulate_separates_worker_and_advisor():
+    m = RunMetrics(arm="haiku+fable")
+    W._accumulate(m, FakeResult(_mu("claude-haiku-4-5-20251001"), num_turns=7, cost=0.2), is_worker=True)
+    W._accumulate(m, FakeResult(_mu("claude-fable-5"), num_turns=1, cost=0.5), is_worker=False)
+    assert m.worker_turns == 7  # advisor 턴은 worker_turns에 미포함
+    assert abs(m.sdk_cost_usd - 0.7) < 1e-9
+    assert "claude-haiku-4-5" in m.by_model
+    assert "claude-fable-5" in m.by_model
 
+
+def test_accumulate_error_records_refusal():
     m = RunMetrics(arm="fable-solo")
-    W.record_result(m, Err())
+    W._accumulate(m, FakeResult({}, is_error=True, subtype="error_max_turns"), is_worker=True)
     assert m.refusals == ["error_max_turns"]

@@ -10,6 +10,8 @@ PRICES: dict[str, tuple[float, float]] = {
     FABLE: (10.0, 50.0),
     HAIKU: (1.0, 5.0),
     SONNET: (2.0, 10.0),  # 도입가; 만료 후 3/15로 갱신
+    # 구독 CLI의 "sonnet" 별칭은 Sonnet 4.6으로 해석됨 → 별도 단가.
+    "claude-sonnet-4-6": (3.0, 15.0),
     OPUS: (5.0, 25.0),
 }
 
