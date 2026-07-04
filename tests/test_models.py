@@ -22,3 +22,17 @@ def test_cost_of_fable_with_cache():
     )
     # 10 (in) + 1.0 (read 0.1x) + 12.5 (write 1.25x) = 23.5
     assert abs(c - 23.5) < 1e-6
+
+
+def test_alias_map():
+    assert models.ALIAS[models.HAIKU] == "haiku"
+    assert models.ALIAS[models.SONNET] == "sonnet"
+    assert models.ALIAS[models.FABLE] == "fable"
+    assert models.ALIAS[models.OPUS] == "opus"
+
+
+def test_normalize_dated_and_alias():
+    assert models.normalize("claude-haiku-4-5-20251001") == models.HAIKU
+    assert models.normalize("claude-fable-5") == models.FABLE
+    assert models.normalize("claude-sonnet-5") == models.SONNET
+    assert models.normalize("unknown-model") == "unknown-model"

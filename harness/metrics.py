@@ -20,6 +20,7 @@ class RunMetrics:
     worker_turns: int = 0
     refusals: list = field(default_factory=list)
     wall_clock_s: float = 0.0
+    sdk_cost_usd: float = 0.0  # Agent SDK 자체 추정 비용(교차확인용)
     grade: dict | None = None
 
     def add_usage(self, model: str, usage) -> None:
@@ -36,6 +37,23 @@ class RunMetrics:
         b["cache_read"] += cr
         b["cache_write"] += cw
         b["calls"] += 1
+
+    def add_model_usage(self, model_usage: dict) -> None:
+        """Agent SDK ResultMessage.model_usage(모델별 camelCase usage)를 누적.
+
+        키는 날짜 포함 풀 ID일 수 있어 models.normalize로 단가표 키에 매핑한다.
+        """
+        for raw_model, stats in (model_usage or {}).items():
+            model = models.normalize(raw_model)
+            self.add_usage(
+                model,
+                {
+                    "input_tokens": stats.get("inputTokens", 0),
+                    "output_tokens": stats.get("outputTokens", 0),
+                    "cache_read_input_tokens": stats.get("cacheReadInputTokens", 0),
+                    "cache_creation_input_tokens": stats.get("cacheCreationInputTokens", 0),
+                },
+            )
 
     def note_advisor_call(self) -> None:
         self.advisor_calls += 1
@@ -55,6 +73,7 @@ class RunMetrics:
             "worker_turns": self.worker_turns,
             "refusals": self.refusals,
             "wall_clock_s": round(self.wall_clock_s, 2),
+            "sdk_cost_usd": round(self.sdk_cost_usd, 6),
             "grade": self.grade,
         }
 

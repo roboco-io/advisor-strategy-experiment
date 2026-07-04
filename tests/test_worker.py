@@ -1,125 +1,64 @@
-from harness.worker import run_worker
-from harness import tools as T
-from harness.metrics import RunMetrics
+from harness import worker as W
 from harness import models
+from harness.metrics import RunMetrics
+from claude_agent_sdk import ToolUseBlock
 
 
-class TU:
-    def __init__(self, name, inp, id):
-        self.type = "tool_use"; self.name = name; self.input = inp; self.id = id
+def test_build_options_solo():
+    o = W.build_options(models.HAIKU, None, "/tmp/wd", max_turns=42)
+    assert o.model == "haiku"
+    assert o.cwd == "/tmp/wd"
+    assert o.permission_mode == "bypassPermissions"
+    assert o.max_turns == 42
+    assert "Bash" in o.allowed_tools
+    assert "Agent" not in o.allowed_tools
+    assert not o.agents  # None 또는 빈 dict
 
 
-class TX:
-    def __init__(self, text):
-        self.type = "text"; self.text = text
+def test_build_options_advisor_arm():
+    o = W.build_options(models.SONNET, models.FABLE, "/tmp/wd")
+    assert o.model == "sonnet"
+    assert "Agent" in o.allowed_tools
+    assert o.agents["advisor"].model == "fable"
+    assert o.agents["advisor"].tools == []
 
 
-class Usage:
-    input_tokens = 10; output_tokens = 5
-    cache_read_input_tokens = 0; cache_creation_input_tokens = 0
+def test_is_advisor_call():
+    yes = ToolUseBlock(id="t1", name="Agent", input={"subagent_type": "advisor"})
+    other = ToolUseBlock(id="t2", name="Agent", input={"subagent_type": "worker"})
+    bash = ToolUseBlock(id="t3", name="Bash", input={"command": "ls"})
+    assert W.is_advisor_call(yes)
+    assert not W.is_advisor_call(other)
+    assert not W.is_advisor_call(bash)
 
 
-class StopDetails:
-    def __init__(self, category):
-        self.category = category
+class FakeResult:
+    model_usage = {
+        "claude-haiku-4-5-20251001": {
+            "inputTokens": 100, "outputTokens": 50,
+            "cacheReadInputTokens": 0, "cacheCreationInputTokens": 200,
+        }
+    }
+    num_turns = 7
+    total_cost_usd = 0.12
+    is_error = False
 
 
-class Resp:
-    def __init__(self, content, stop, stop_details=None, model=None):
-        self.content = content; self.stop_reason = stop; self.usage = Usage()
-        self.stop_details = stop_details
-        if model is not None:
-            self.model = model
-
-
-class ScriptedMessages:
-    """정해진 순서로 응답을 내주는 페이크."""
-    def __init__(self, script):
-        self.script = list(script); self.calls = []
-
-    def create(self, **kwargs):
-        self.calls.append(kwargs)
-        return self.script.pop(0)
-
-
-class Beta:
-    def __init__(self, script):
-        self.messages = ScriptedMessages(script)
-
-
-class Client:
-    def __init__(self, script, beta_script=None):
-        self.messages = ScriptedMessages(script)
-        self.beta = Beta(beta_script if beta_script is not None else [])
-
-
-def test_worker_uses_bash_then_finishes(tmp_path):
-    sb = T.Sandbox(str(tmp_path))
-    script = [
-        Resp([TU("bash", {"command": "echo built > done.txt"}, "u1")], "tool_use"),
-        Resp([TX("done")], "end_turn"),
-    ]
+def test_record_result_maps_model_usage():
     m = RunMetrics(arm="haiku-solo")
-    client = Client(script)
-    final = run_worker(client, models.HAIKU, sb, m, spec="build it")
-    assert "done" in final
-    assert (tmp_path / "done.txt").exists()
-    assert m.worker_turns == 2
-    # Haiku는 effort 미포함; 두 번의 실제 API 호출이 일어났는지 확인
-    assert len(client.messages.calls) == 2
-    assert all("output_config" not in c for c in client.messages.calls)
+    W.record_result(m, FakeResult())
+    assert m.worker_turns == 7
+    assert abs(m.sdk_cost_usd - 0.12) < 1e-9
+    assert m.by_model["claude-haiku-4-5"]["input_tokens"] == 100
+    assert m.by_model["claude-haiku-4-5"]["output_tokens"] == 50
+    assert m.total_cost > 0
 
 
-def test_sonnet_includes_effort(tmp_path):
-    sb = T.Sandbox(str(tmp_path))
-    client = Client([Resp([TX("ok")], "end_turn")])
-    run_worker(client, models.SONNET, sb, RunMetrics(arm="sonnet-solo"), spec="x")
-    assert client.messages.calls[0].get("output_config", {}).get("effort") == "high"
+def test_record_result_error_records_refusal():
+    class Err(FakeResult):
+        is_error = True
+        subtype = "error_max_turns"
 
-
-def test_haiku_omits_effort(tmp_path):
-    sb = T.Sandbox(str(tmp_path))
-    client = Client([Resp([TX("ok")], "end_turn")])
-    run_worker(client, models.HAIKU, sb, RunMetrics(arm="haiku-solo"), spec="x")
-    assert "output_config" not in client.messages.calls[0]
-
-
-def test_max_tokens_does_not_end_arm(tmp_path):
-    sb = T.Sandbox(str(tmp_path))
-    script = [
-        Resp([TX("partial")], "max_tokens"),
-        Resp([TX("done")], "end_turn"),
-    ]
-    m = RunMetrics(arm="haiku-solo")
-    client = Client(script)
-    final = run_worker(client, models.HAIKU, sb, m, spec="build it")
-    assert m.worker_turns == 2
-    assert "done" in final
-
-
-def test_fable_solo_routes_through_beta_and_records_refusal(tmp_path):
-    sb = T.Sandbox(str(tmp_path))
-    beta_script = [Resp([], "refusal", stop_details=StopDetails("cyber"))]
     m = RunMetrics(arm="fable-solo")
-    client = Client(script=[], beta_script=beta_script)
-    final = run_worker(client, models.FABLE, sb, m, spec="build it")
-    assert m.refusals == ["cyber"]
-    assert final == ""
-    assert len(client.beta.messages.calls) == 1
-    call = client.beta.messages.calls[0]
-    assert call.get("betas") == ["server-side-fallback-2026-06-01"]
-    assert call.get("fallbacks") == [{"model": "claude-opus-4-8"}]
-    assert len(client.messages.calls) == 0
-
-
-def test_cost_attributed_to_served_model_not_worker_model(tmp_path):
-    """served model (response.model)이 요청 모델과 다르면 비용은 served model에 귀속되어야 함."""
-    sb = T.Sandbox(str(tmp_path))
-    script = [
-        Resp([TX("ok")], "end_turn", model="claude-opus-4-8"),
-    ]
-    m = RunMetrics(arm="sonnet-solo")
-    client = Client(script)
-    run_worker(client, models.SONNET, sb, m, spec="build it")
-    assert "claude-opus-4-8" in m.by_model
-    assert models.SONNET not in m.by_model
+    W.record_result(m, Err())
+    assert m.refusals == ["error_max_turns"]

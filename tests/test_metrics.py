@@ -29,3 +29,17 @@ def test_counters_and_serialize(tmp_path):
     p = tmp_path / "r.json"
     m.save(str(p))
     assert p.exists()
+
+
+def test_add_model_usage_normalizes_and_costs():
+    m = RunMetrics(arm="x")
+    m.add_model_usage({
+        "claude-haiku-4-5-20251001": {
+            "inputTokens": 1_000_000, "outputTokens": 1_000_000,
+            "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0,
+        }
+    })
+    # 날짜 포함 ID가 단가표 키로 정규화되고 비용이 계산됨
+    assert "claude-haiku-4-5" in m.by_model
+    assert m.by_model["claude-haiku-4-5"]["output_tokens"] == 1_000_000
+    assert abs(m.total_cost - 6.0) < 1e-9

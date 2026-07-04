@@ -13,7 +13,28 @@ PRICES: dict[str, tuple[float, float]] = {
     OPUS: (5.0, 25.0),
 }
 
+# Agent SDK `model` 파라미터에 넘길 별칭 (풀 ID → alias)
+ALIAS: dict[str, str] = {
+    FABLE: "fable",
+    HAIKU: "haiku",
+    SONNET: "sonnet",
+    OPUS: "opus",
+}
+
 _M = 1_000_000
+
+
+def normalize(model_id: str) -> str:
+    """model_usage 키(날짜 포함 풀 ID)를 PRICES 키로 정규화.
+
+    예: 'claude-haiku-4-5-20251001' -> 'claude-haiku-4-5'. 매칭 없으면 원본 반환.
+    """
+    if model_id in PRICES:
+        return model_id
+    for key in PRICES:
+        if model_id.startswith(key):
+            return key
+    return model_id
 
 
 def cost_of(

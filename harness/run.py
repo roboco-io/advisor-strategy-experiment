@@ -1,14 +1,13 @@
-"""arm 정의·오케스트레이션·CLI."""
+"""arm 정의·오케스트레이션·CLI (Agent SDK + 구독 실행)."""
 from __future__ import annotations
 import argparse
+import asyncio
 import os
 import tempfile
 import time
 
 from harness import models, grade
 from harness.metrics import RunMetrics
-from harness.tools import Sandbox
-from harness.advisor import Advisor
 from harness.worker import run_worker
 
 ARMS = [
@@ -20,17 +19,25 @@ ARMS = [
 ]
 
 
-def run_arm(arm, spec, collection_path, results_dir, client_factory,
-            grade_fn=grade.grade, n_index: int = 0) -> dict:
+def _use_subscription() -> None:
+    """API 키 과금 대신 구독 인증을 쓰도록 ANTHROPIC_API_KEY를 제거."""
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+
+
+def _drive_worker(arm, workdir, spec, metrics, max_turns) -> None:
+    """라이브 worker를 동기적으로 구동(테스트에서 monkeypatch 대상)."""
+    asyncio.run(run_worker(arm["worker"], arm["advisor"], workdir, spec, metrics, max_turns))
+
+
+def run_arm(arm, spec, collection_path, results_dir,
+            grade_fn=grade.grade, n_index: int = 0, max_turns: int = 60) -> dict:
     os.makedirs(results_dir, exist_ok=True)
+    _use_subscription()
     metrics = RunMetrics(arm=arm["key"])
     workdir = tempfile.mkdtemp(prefix=f"{arm['key']}-{n_index}-")
-    client = client_factory()
-    advisor = Advisor(client, metrics, model=arm["advisor"]) if arm["advisor"] else None
-    sandbox = Sandbox(workdir)
 
     start = time.monotonic()
-    run_worker(client, arm["worker"], sandbox, metrics, spec, advisor=advisor)
+    _drive_worker(arm, workdir, spec, metrics, max_turns)
     metrics.grade = grade_fn(workdir, collection_path)
     metrics.wall_clock_s = time.monotonic() - start
 
@@ -46,9 +53,10 @@ def main():
     ap.add_argument("--results-dir", default="results")
     ap.add_argument("--collection", required=True)
     ap.add_argument("--spec", default="tasks/realworld_spec.md")
+    ap.add_argument("--max-turns", type=int, default=60)
     args = ap.parse_args()
 
-    import anthropic
+    _use_subscription()
     spec = open(args.spec).read()
     selected = ARMS if args.arms == "all" else [a for a in ARMS if a["key"] in args.arms.split(",")]
 
@@ -58,14 +66,15 @@ def main():
             try:
                 res = run_arm(
                     arm, spec, args.collection, args.results_dir,
-                    client_factory=lambda: anthropic.Anthropic(), n_index=i,
+                    n_index=i, max_turns=args.max_turns,
                 )
             except Exception as e:  # noqa: BLE001 - 한 arm 실패가 배치 전체를 중단시키지 않도록
                 print(f"  ERROR arm={arm['key']} n={i}: {e}")
                 continue
             g = res["grade"] or {}
             print(f"  pass={g.get('passed')}/{g.get('total')} cost=${res['total_cost']:.2f} "
-                  f"turns={res['worker_turns']} advisor={res['advisor_calls']}")
+                  f"(sdk~${res['sdk_cost_usd']:.2f}) turns={res['worker_turns']} "
+                  f"advisor={res['advisor_calls']}")
 
 
 if __name__ == "__main__":

@@ -35,6 +35,34 @@ RealWorld 앱 자체는 **벤치마크 수단**이며 목적이 아니다.
 - 위 수치·툴은 assistant 지식 컷오프(2026-01) 이후 자료(Perplexity 인용)라, 실제 SDK/툴
   가용성은 빌드 전 스모크 테스트로 검증한다.
 
+## 2.5 실행 채널 결정 (2026-07-04 개정)
+
+초기 설계는 Anthropic Messages API(유료 API 키)로 직접 오케스트레이션했으나,
+**Claude Agent SDK(`claude-agent-sdk`) + Claude Code 구독 인증**으로 전환한다.
+
+- **동기**: per-token API 과금 회피. 구독 사용량 한도(5시간/주간)로 차감.
+- **비용 지표 유지**: 비용은 토큰 사용량 × 공시 단가(`models.cost_of`)로 계산하므로,
+  결제 채널과 무관하게 산출된다. Agent SDK의 `ResultMessage.modelUsage`(모델별
+  input/output/cache 토큰)를 소스로 쓴다 — 기존 수기 usage 배관보다 정확.
+- **하니스 재구현 제거**: Agent SDK가 Bash/Read/Write/Edit/Glob/Grep를 내장 제공하므로
+  **직접 만든 `tools.py` 샌드박스는 폐기**(기존 도구 재구현 금지 원칙에 부합).
+- **advisor 구조**: 공식 패턴대로 `AgentDefinition(model="fable")` **서브에이전트**로
+  advisor를 배치하고, worker(haiku/sonnet)가 이를 위임 호출한다. (커스텀 consult 도구의
+  중첩 쿼리는 비공식이라 지양.)
+- **인증**: `claude setup-token`으로 `CLAUDE_CODE_OAUTH_TOKEN` 발급, `ANTHROPIC_API_KEY`는
+  unset. 헤드리스에서 bash가 승인 프롬프트 없이 돌도록 permission mode를 완화.
+- **주의**: (a) Agent SDK 구독 인증은 제3자 제품엔 제한 — 개인 연구는 ToS 회색지대,
+  위험 인지하고 진행. (b) 5시간 사용량 한도로 5 arm 실험이 도중 소진될 수 있음(Max 권장,
+  시작 전 `/usage` 확인). (c) Fable의 구독 접근은 플랜 의존 — 현재 세션에서 Fable 사용
+  가능함을 확인.
+
+**하니스 재사용/교체**: 유지 = `models.py`, `metrics.py`(modelUsage 어댑터 추가),
+`grade.py`, `run.py`(워커 호출부 교체), `tasks/realworld_spec.md`. 교체 = `worker.py`
+(Agent SDK `query`), 삭제 = `tools.py`. `advisor.py`는 Fable 서브에이전트 정의로 축소.
+
+이하 §5의 raw Messages API 세부(§5.1 수동 루프, §5.2 커스텀 consult 도구, `tools.py`
+샌드박스)는 이 결정으로 **대체됨**. 나머지(arms, 계측 항목, 채점, 제어, 규모, 산출물)는 유효.
+
 ## 3. 모델 및 단가 (2026-07 기준)
 
 | 역할 | 모델 ID | 입력 $/1M | 출력 $/1M | 비고 |
