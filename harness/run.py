@@ -55,10 +55,14 @@ def main():
     for i in range(args.n):
         for arm in selected:
             print(f"[run {i}] arm={arm['key']} ...")
-            res = run_arm(
-                arm, spec, args.collection, args.results_dir,
-                client_factory=lambda: anthropic.Anthropic(), n_index=i,
-            )
+            try:
+                res = run_arm(
+                    arm, spec, args.collection, args.results_dir,
+                    client_factory=lambda: anthropic.Anthropic(), n_index=i,
+                )
+            except Exception as e:  # noqa: BLE001 - 한 arm 실패가 배치 전체를 중단시키지 않도록
+                print(f"  ERROR arm={arm['key']} n={i}: {e}")
+                continue
             g = res["grade"] or {}
             print(f"  pass={g.get('passed')}/{g.get('total')} cost=${res['total_cost']:.2f} "
                   f"turns={res['worker_turns']} advisor={res['advisor_calls']}")
