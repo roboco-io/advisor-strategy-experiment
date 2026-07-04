@@ -51,6 +51,25 @@ uv run python -m harness.run --arms haiku-solo,haiku+fable --n 1 \
 `by_model`(모델별 토큰), `worker_turns`, `advisor_calls`, `fallback_used`, `wall_clock_s`,
 `grade`(`server_ok`, `passed`/`total`, `failures`).
 
+## 결과 (N=5, 2026-07-05)
+
+25회(5 arm × 5) 실행. 상세·원본: [`docs/results/2026-07-05-advisor-strategy-n5-results.md`](docs/results/2026-07-05-advisor-strategy-n5-results.md)
+
+| Arm | 합격률(per-run) | 회당 비용 | advisor |
+|---|---|---|---|
+| haiku-solo | 46.4 ± 6.0% | **$0.22** | 0 |
+| haiku+fable | 48.0 ± 2.2% | $0.95 | 3 |
+| sonnet-solo | 48.3 ± 2.0% | $0.60 | 0 |
+| **sonnet+fable** | **50.7 ± 2.1%** | $1.84 | 3 |
+| fable-solo | 45.1 ± 1.3% | $1.23 | 0 |
+
+**Advisor 승격폭**: haiku +1.6pp(비용 4.3배), sonnet +2.4pp(비용 3.1배).
+
+**결론**: Advisor는 약한 워커의 재앙 런을 막아 **일관성(분산 축소)**을 주지만(haiku 편차
+6.0→2.2pp), 평균 품질 향상(+2pp 내외)은 3~4배 비용을 정당화하지 못한다. 가성비 최적은
+`sonnet-solo`(48.3%, $0.60), 품질 최고는 `sonnet+fable`(50.7%, $1.84). "가장 강한 모델 단독"인
+`fable-solo`는 조기 종료로 오히려 최하 합격률.
+
 ## ⚠️ 주의
 
 - **보안**: worker는 `permission_mode="bypassPermissions"`로 임시 디렉토리에서 **임의 bash를
