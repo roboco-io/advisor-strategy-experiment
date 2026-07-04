@@ -25,9 +25,11 @@ class StopDetails:
 
 
 class Resp:
-    def __init__(self, content, stop, stop_details=None):
+    def __init__(self, content, stop, stop_details=None, model=None):
         self.content = content; self.stop_reason = stop; self.usage = Usage()
         self.stop_details = stop_details
+        if model is not None:
+            self.model = model
 
 
 class ScriptedMessages:
@@ -104,5 +106,20 @@ def test_fable_solo_routes_through_beta_and_records_refusal(tmp_path):
     assert m.refusals == ["cyber"]
     assert final == ""
     assert len(client.beta.messages.calls) == 1
-    assert client.beta.messages.calls[0].get("betas") == ["server-side-fallback-2026-06-01"]
+    call = client.beta.messages.calls[0]
+    assert call.get("betas") == ["server-side-fallback-2026-06-01"]
+    assert call.get("fallbacks") == [{"model": "claude-opus-4-8"}]
     assert len(client.messages.calls) == 0
+
+
+def test_cost_attributed_to_served_model_not_worker_model(tmp_path):
+    """served model (response.model)이 요청 모델과 다르면 비용은 served model에 귀속되어야 함."""
+    sb = T.Sandbox(str(tmp_path))
+    script = [
+        Resp([TX("ok")], "end_turn", model="claude-opus-4-8"),
+    ]
+    m = RunMetrics(arm="sonnet-solo")
+    client = Client(script)
+    run_worker(client, models.SONNET, sb, m, spec="build it")
+    assert "claude-opus-4-8" in m.by_model
+    assert models.SONNET not in m.by_model

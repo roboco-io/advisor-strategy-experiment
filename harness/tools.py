@@ -28,6 +28,7 @@ class Sandbox:
             cmd, shell=True, cwd=self.workdir, start_new_session=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
+        pgid = os.getpgid(proc.pid)  # capture NOW, while proc is guaranteed alive
         try:
             out, _ = proc.communicate(timeout=self.timeout)
             result = out[:20000] or "(no output)"
@@ -35,7 +36,7 @@ class Sandbox:
             result = f"error: command timed out after {self.timeout}s"
         finally:
             try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                os.killpg(pgid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
         return result

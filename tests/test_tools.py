@@ -21,6 +21,21 @@ def test_editor_create_and_path_traversal_blocked(tmp_path):
     assert "error" in res.lower() or "denied" in res.lower()
 
 
+def test_bash_reaps_background_process(tmp_path):
+    sb = tools.Sandbox(str(tmp_path))
+    sb.run_bash({"command": "sleep 30 & echo $! > pid.txt"})
+    pid = int((tmp_path / "pid.txt").read_text().strip())
+    import time, os
+    time.sleep(0.5)
+    # the backgrounded process must have been killed
+    alive = True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        alive = False
+    assert not alive, f"orphan pid {pid} survived"
+
+
 def test_handle_tool_use_dispatch(tmp_path):
     sb = tools.Sandbox(str(tmp_path))
     r = tools.handle_tool_use(Block("bash", {"command": "echo ok"}), sb)
