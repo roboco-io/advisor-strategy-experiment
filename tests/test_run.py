@@ -29,4 +29,5 @@ def test_run_arm_end_to_end(tmp_path, monkeypatch):
     assert out["arm"] == "haiku-solo"
     assert out["grade"]["passed"] == 8
     assert out["worker_turns"] == 3
+    assert out["fallback_used"] is False  # opus 미사용
     assert (tmp_path / "haiku-solo-0.json").exists()

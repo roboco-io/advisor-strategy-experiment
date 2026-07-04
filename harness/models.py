@@ -44,7 +44,11 @@ def cost_of(
     cache_read: int = 0,
     cache_write: int = 0,
 ) -> float:
-    """토큰 사용량을 단가로 환산. cache_read≈0.1x, cache_write≈1.25x(5분 TTL) 입력단가."""
+    """토큰 사용량을 단가로 환산. cache_read≈0.1x, cache_write≈1.25x(5분 TTL) 입력단가.
+
+    단가표에 없는 모델은 크래시 대신 0.0을 반환(토큰은 계속 기록되고 데이터 유실 방지)."""
+    if model not in PRICES:
+        return 0.0
     in_price, out_price = PRICES[model]
     return (
         input_tokens / _M * in_price

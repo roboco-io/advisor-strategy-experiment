@@ -40,6 +40,10 @@ def build_options(worker_model, advisor_model, workdir, max_turns: int = 60) -> 
     if advisor_model is not None:
         tools.append("Agent")
         kwargs["agents"] = {"advisor": advisor_agent(advisor_model)}
+    # Fable worker는 안전 분류기 refusal 대비 opus fallback을 건다(spec §3).
+    # (advisor 서브에이전트에는 SDK가 per-agent fallback을 노출하지 않음 — 한계.)
+    if worker_model == models.FABLE:
+        kwargs["fallback_model"] = models.ALIAS[models.OPUS]
     kwargs["allowed_tools"] = tools
     return ClaudeAgentOptions(**kwargs)
 

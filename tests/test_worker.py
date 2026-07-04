@@ -21,6 +21,13 @@ def test_build_options_advisor_arm():
     assert "Agent" in o.allowed_tools
     assert o.agents["advisor"].model == "fable"
     assert o.agents["advisor"].tools == []
+    assert o.fallback_model is None  # sonnet worker는 fallback 불필요
+
+
+def test_build_options_fable_worker_sets_fallback():
+    o = W.build_options(models.FABLE, None, "/tmp/wd")
+    assert o.model == "fable"
+    assert o.fallback_model == "opus"  # Fable refusal 대비
 
 
 def test_is_advisor_call():

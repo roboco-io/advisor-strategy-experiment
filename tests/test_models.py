@@ -36,3 +36,8 @@ def test_normalize_dated_and_alias():
     assert models.normalize("claude-fable-5") == models.FABLE
     assert models.normalize("claude-sonnet-5") == models.SONNET
     assert models.normalize("unknown-model") == "unknown-model"
+
+
+def test_cost_of_unknown_model_returns_zero():
+    # 미매핑 모델은 KeyError 대신 0.0 (arm 도중 데이터 유실 방지)
+    assert models.cost_of("some-unmapped-model", 1_000_000, 1_000_000) == 0.0

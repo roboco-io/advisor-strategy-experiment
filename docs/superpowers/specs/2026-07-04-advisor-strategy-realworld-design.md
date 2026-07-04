@@ -63,6 +63,19 @@ RealWorld 앱 자체는 **벤치마크 수단**이며 목적이 아니다.
 이하 §5의 raw Messages API 세부(§5.1 수동 루프, §5.2 커스텀 consult 도구, `tools.py`
 샌드박스)는 이 결정으로 **대체됨**. 나머지(arms, 계측 항목, 채점, 제어, 규모, 산출물)는 유효.
 
+**post-pivot 요구사항 조정(명시):**
+- **§3 Fable fallback**: Messages API의 서버사이드 `fallbacks` 대신 Agent SDK의
+  `ClaudeAgentOptions.fallback_model="opus"`로 복원(Fable worker arm, 즉 fable-solo).
+  발동 여부는 `metrics.fallback_used`(어떤 arm도 opus를 쓰지 않으므로 opus 사용량=발동)로
+  기록. **한계**: SDK는 advisor 서브에이전트에 per-agent fallback을 노출하지 않아,
+  advisor=fable arm의 advisor refusal에는 fallback이 없다(RealWorld 코딩 과제는 분류기
+  트립 위험이 낮아 수용).
+- **§5.5 advisor 호출 하드캡**: SDK 위임 모델에서는 per-tool 하드캡을 두지 않고,
+  `max_turns` 상한 + 프롬프트 힌트 + `advisor_calls` 기록(결과에 노출)으로 대체. 필요 시
+  `can_use_tool` 훅으로 하드캡을 추가하는 것은 후속 개선 항목.
+- **cost_of 견고성**: 단가표 미매핑 모델은 크래시 대신 비용 0으로 처리(토큰은 기록) —
+  arm 도중 예외로 데이터가 유실되지 않게.
+
 ## 3. 모델 및 단가 (2026-07 기준)
 
 | 역할 | 모델 ID | 입력 $/1M | 출력 $/1M | 비고 |

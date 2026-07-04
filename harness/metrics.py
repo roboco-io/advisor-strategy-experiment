@@ -21,6 +21,7 @@ class RunMetrics:
     refusals: list = field(default_factory=list)
     wall_clock_s: float = 0.0
     sdk_cost_usd: float = 0.0  # Agent SDK 자체 추정 비용(교차확인용)
+    fallback_used: bool = False  # Fable refusal → opus fallback 발동 여부
     grade: dict | None = None
 
     def add_usage(self, model: str, usage) -> None:
@@ -74,6 +75,7 @@ class RunMetrics:
             "refusals": self.refusals,
             "wall_clock_s": round(self.wall_clock_s, 2),
             "sdk_cost_usd": round(self.sdk_cost_usd, 6),
+            "fallback_used": self.fallback_used,
             "grade": self.grade,
         }
 

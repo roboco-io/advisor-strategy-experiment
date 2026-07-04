@@ -38,6 +38,8 @@ def run_arm(arm, spec, collection_path, results_dir,
 
     start = time.monotonic()
     _drive_worker(arm, workdir, spec, metrics, max_turns)
+    # 어떤 arm도 opus를 worker/advisor로 쓰지 않으므로, opus 사용량 = fallback 발동.
+    metrics.fallback_used = models.OPUS in metrics.by_model
     metrics.grade = grade_fn(workdir, collection_path)
     metrics.wall_clock_s = time.monotonic() - start
 
