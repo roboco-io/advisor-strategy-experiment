@@ -2,6 +2,8 @@
 from __future__ import annotations
 import json
 import os
+import shlex
+import signal
 import subprocess
 import time
 import urllib.request
@@ -16,6 +18,14 @@ def parse_newman_json(report: dict) -> dict:
         for f in report.get("run", {}).get("failures", [])
     ]
     return {"total": total, "passed": total - failed, "failures": failures}
+
+
+def _load_report(path: str) -> dict | None:
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 
 def _wait_health(port: int, timeout: int) -> bool:
@@ -36,21 +46,31 @@ def grade(workdir, collection_path, port=3000, boot_cmd="npm start", boot_timeou
     subprocess.run("npm install", shell=True, cwd=workdir, env=env,
                    capture_output=True, text=True, timeout=300)
     proc = subprocess.Popen(boot_cmd, shell=True, cwd=workdir, env=env,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True)
     try:
         if not _wait_health(port, boot_timeout):
             return fail
         report_path = os.path.join(workdir, "newman-report.json")
         subprocess.run(
-            f"newman run {collection_path} --reporters json "
+            f"newman run {shlex.quote(collection_path)} --reporters json "
             f"--reporter-json-export {report_path} "
             f"--env-var APIURL=http://localhost:{port}/api",
             shell=True, capture_output=True, text=True, timeout=300,
         )
-        with open(report_path) as f:
-            report = json.load(f)
+        report = _load_report(report_path)
+        if report is None:
+            return {"server_ok": True, "total": 0, "passed": 0,
+                     "failures": ["newman produced no report"]}
         out = parse_newman_json(report)
         out["server_ok"] = True
         return out
     finally:
-        proc.terminate()
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            proc.wait(timeout=10)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
