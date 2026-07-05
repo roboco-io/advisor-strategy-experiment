@@ -51,10 +51,11 @@ def test_build_delegator_options():
     assert o.cwd == "/tmp/wd"
     assert o.permission_mode == "bypassPermissions"
     assert o.setting_sources == []
-    assert "Agent" in o.allowed_tools  # Advisor는 위임
+    assert "Task" in o.allowed_tools  # Advisor는 Task 도구로 worker 서브에이전트에 위임
     assert "Skill" in o.disallowed_tools
     assert "worker" in o.agents  # Opus 구현 서브에이전트
     assert o.agents["worker"].model == "opus"
+    assert o.agents["worker"].permissionMode == "bypassPermissions"  # 헤드리스 정지 방지
 
 
 def test_accumulate_separates_worker_and_advisor():

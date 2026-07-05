@@ -145,7 +145,7 @@ async def run_worker(worker_model, advisor_model, workdir, spec, metrics, max_tu
 
 
 # === Delegation ("develop-junior") variant ===
-# Advisor(Sonnet)가 루프를 소유하고, 구현은 Opus worker 서브에이전트에 Agent 도구로 위임한 뒤
+# Advisor(Sonnet)가 루프를 소유하고, 구현은 Opus worker 서브에이전트에 Task 도구로 위임한 뒤
 # curl로 직접 검증한다. 구현은 서브에이전트가 하므로 Advisor는 Write/Edit를 갖지 않는다.
 
 DELEG_WORKER_PROMPT = (
@@ -157,7 +157,7 @@ DELEG_WORKER_PROMPT = (
 
 DELEGATOR_INSTRUCTIONS = (
     "You are the Advisor and you OWN this loop. Do NOT implement anything yourself: delegate "
-    "all implementation to the `worker` subagent (Opus) via the `Agent` tool. Instruct the "
+    "all implementation to the `worker` subagent (Opus) via the `Task` tool. Instruct the "
     "worker to do all work strictly inside the working directory `{workdir}` — forbid /tmp, "
     "the home directory, and any external path; the grader runs `npm start` from there. "
     "When the worker reports back, verify it YOURSELF by running "
@@ -178,7 +178,7 @@ def build_delegator_options(
         permission_mode="bypassPermissions",
         max_turns=max_turns,
         setting_sources=[],
-        allowed_tools=["Agent", "Bash", "Read", "Grep", "Glob"],
+        allowed_tools=["Task", "Bash", "Read", "Grep", "Glob"],
         disallowed_tools=["Skill"],
         agents={
             "worker": AgentDefinition(
