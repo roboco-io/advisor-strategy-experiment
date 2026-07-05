@@ -53,22 +53,28 @@ uv run python -m harness.run --arms haiku-solo,haiku+fable --n 1 \
 
 ## 결과 (N=5, 2026-07-05)
 
-25회(5 arm × 5) 실행. 상세·원본: [`docs/results/2026-07-05-advisor-strategy-n5-results.md`](docs/results/2026-07-05-advisor-strategy-n5-results.md)
+7 arm × 5회. 상세·원본: [`docs/results/2026-07-05-advisor-strategy-n5-results.md`](docs/results/2026-07-05-advisor-strategy-n5-results.md)
 
-| Arm | 합격률(per-run) | 회당 비용 | advisor |
-|---|---|---|---|
-| haiku-solo | 46.4 ± 6.0% | **$0.22** | 0 |
-| haiku+fable | 48.0 ± 2.2% | $0.95 | 3 |
-| sonnet-solo | 48.3 ± 2.0% | $0.60 | 0 |
-| **sonnet+fable** | **50.7 ± 2.1%** | $1.84 | 3 |
-| fable-solo | 45.1 ± 1.3% | $1.23 | 0 |
+| Arm | 워커 | 조언/위임 | 합격률(per-run) | 회당 비용 |
+|---|---|---|---|---|
+| haiku-solo | Haiku | — | 46.4 ± 6.0% | **$0.22** |
+| haiku+fable | Haiku | Fable 조언 | 48.0 ± 2.2% | $0.95 |
+| sonnet-solo | Sonnet | — | 48.3 ± 2.0% | $0.60 |
+| **sonnet+fable** | Sonnet | Fable 조언 | **50.7 ± 2.1%** | $1.84 |
+| fable-solo | Fable | — | 45.1 ± 1.3% | $1.23 |
+| **opus-solo** | Opus | — | 48.8 ± 2.3% | **$0.56** |
+| deleg-opus | Opus | 개발동생 위임+검증 | 47.3 ± 0.8% | $2.24 |
 
-**Advisor 승격폭**: haiku +1.6pp(비용 4.3배), sonnet +2.4pp(비용 3.1배).
+**Advisor/위임 승격폭**
+- haiku → haiku+fable: +1.6pp (비용 4.4배)
+- sonnet → sonnet+fable: +2.4pp (비용 3.1배)
+- opus-solo → deleg-opus: **−1.5pp** (비용 4.0배)
 
-**결론**: Advisor는 약한 워커의 재앙 런을 막아 **일관성(분산 축소)**을 주지만(haiku 편차
-6.0→2.2pp), 평균 품질 향상(+2pp 내외)은 3~4배 비용을 정당화하지 못한다. 가성비 최적은
-`sonnet-solo`(48.3%, $0.60), 품질 최고는 `sonnet+fable`(50.7%, $1.84). "가장 강한 모델 단독"인
-`fable-solo`는 조기 종료로 오히려 최하 합격률.
+**결론**: Advisor/위임 구조는 약한 워커의 재앙 런을 막아 **일관성(분산 축소)**을 주지만
+(deleg-opus 편차 ±0.8로 최소), 평균 품질은 못 올린다 — 강한 워커에선 오히려 −1.5pp.
+가성비·품질 종합 승자는 **`opus-solo`(48.8%, $0.56)**. `sonnet+fable`이 품질 최고(50.7%)이나
+3배 비싸다. **개발동생 위임 방식은 자율 1회 빌드 벤치마크에선 본전을 못 뽑지만**, 그 진가인
+*검증 규율*은 도그푸딩에서 위임 무음(無音) 버그 2건을 잡아내며 실증됐다(리포트 §개발동생 참조).
 
 ## ⚠️ 주의
 
