@@ -145,8 +145,11 @@ async def run_worker(worker_model, advisor_model, workdir, spec, metrics, max_tu
 
 
 # === Delegation ("develop-junior") variant ===
-# Advisor(Sonnet)가 루프를 소유하고, 구현은 Opus worker 서브에이전트에 Task 도구로 위임한 뒤
+# Advisor(Sonnet)가 루프를 소유하고, 구현은 Opus worker 서브에이전트에 Agent/Task 도구로 위임한 뒤
 # curl로 직접 검증한다. 구현은 서브에이전트가 하므로 Advisor는 Write/Edit를 갖지 않는다.
+# 함정: 이 환경엔 백그라운드 서브에이전트 기능이 있어, 지시가 약하면 Advisor가 워커를
+# fire-and-forget로 던지고 턴을 끝내버린다 → 워커가 완성 전에 죽음(Opus 사용량 0). 그래서
+# 지시문에서 "동기 실행·턴 내 대기"를 강하게 못 박고, run_delegator가 검증 라운드로 반복한다.
 
 DELEG_WORKER_PROMPT = (
     "You are the implementation worker. Build the actual source files and run the server "
@@ -155,15 +158,28 @@ DELEG_WORKER_PROMPT = (
     "until the endpoints run and the server responds."
 )
 
+MAX_DELEG_ROUNDS = 3  # Advisor가 조기 종료해도 검증·재위임 기회를 준다.
+
 DELEGATOR_INSTRUCTIONS = (
-    "You are the Advisor and you OWN this loop. Do NOT implement anything yourself: delegate "
-    "all implementation to the `worker` subagent (Opus) via the `Task` tool. Instruct the "
-    "worker to do all work strictly inside the working directory `{workdir}` — forbid /tmp, "
-    "the home directory, and any external path; the grader runs `npm start` from there. "
-    "When the worker reports back, verify it YOURSELF by running "
-    "`curl -s http://localhost:${{PORT:-3000}}/api/tags`; if that does not return a JSON body, "
-    "write a corrective brief and re-delegate to the worker until it does.\n\n"
+    "You are the Advisor and you OWN this loop. Do NOT write code yourself. Delegate ALL "
+    "implementation to the `worker` subagent (Opus) by calling the Agent/Task tool with "
+    "subagent_type \"worker\".\n"
+    "CRITICAL — run the worker SYNCHRONOUSLY: wait for the worker's full completion report in "
+    "the SAME turn. Do NOT run it in the background, do NOT say you will be notified later, and "
+    "do NOT end your turn while the worker is still running. Give it a complete brief: build all "
+    "source files and start the server strictly inside `{workdir}` (never /tmp, the home "
+    "directory, or any external path) — the grader runs `npm start` there.\n"
+    "After the worker returns, verify YOURSELF with "
+    "`curl -s http://localhost:${{PORT:-3000}}/api/tags`; if it does not return a JSON body, "
+    "delegate a corrective brief to the worker (synchronously, wait for it) and re-verify.\n\n"
     "=== RealWorld API spec ===\n{spec}"
+)
+
+DELEGATOR_CONTINUE = (
+    "Verify the server now: run `curl -s http://localhost:${{PORT:-3000}}/api/tags`. If it does "
+    "NOT return a JSON body, delegate a corrective brief to the `worker` subagent — run it "
+    "SYNCHRONOUSLY and WAIT for its report in this turn — then re-verify. If it already returns "
+    "JSON, stop."
 )
 
 
@@ -178,7 +194,7 @@ def build_delegator_options(
         permission_mode="bypassPermissions",
         max_turns=max_turns,
         setting_sources=[],
-        allowed_tools=["Task", "Bash", "Read", "Grep", "Glob"],
+        allowed_tools=["Agent", "Task", "Bash", "Read", "Grep", "Glob"],
         disallowed_tools=["Skill"],
         agents={
             "worker": AgentDefinition(
@@ -199,7 +215,9 @@ async def run_delegator(
     worker 서브에이전트 사용량은 ResultMessage.model_usage에 모델별로 집계된다."""
     opts = build_delegator_options(advisor_model, worker_model, workdir, max_turns)
     async with ClaudeSDKClient(options=opts) as worker:
-        await worker.query(
-            DELEGATOR_INSTRUCTIONS.format(workdir=str(workdir), spec=spec)
-        )
+        await worker.query(DELEGATOR_INSTRUCTIONS.format(workdir=str(workdir), spec=spec))
         await _drain_turn(worker, metrics)
+        # Advisor가 워커를 백그라운드로 던지고 조기 종료하는 경우를 대비해 검증·재위임 라운드 반복.
+        for _ in range(MAX_DELEG_ROUNDS - 1):
+            await worker.query(DELEGATOR_CONTINUE)
+            await _drain_turn(worker, metrics)

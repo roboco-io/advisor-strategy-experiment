@@ -51,7 +51,7 @@ def test_build_delegator_options():
     assert o.cwd == "/tmp/wd"
     assert o.permission_mode == "bypassPermissions"
     assert o.setting_sources == []
-    assert "Task" in o.allowed_tools  # Advisor는 Task 도구로 worker 서브에이전트에 위임
+    assert "Agent" in o.allowed_tools and "Task" in o.allowed_tools  # 서브에이전트 소환 도구
     assert "Skill" in o.disallowed_tools
     assert "worker" in o.agents  # Opus 구현 서브에이전트
     assert o.agents["worker"].model == "opus"
