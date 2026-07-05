@@ -18,6 +18,8 @@ ARMS = [
     {"key": "sonnet+fable", "worker": models.SONNET, "advisor": models.FABLE},
     {"key": "opus-solo", "worker": models.OPUS, "advisor": None},
     {"key": "deleg-opus", "worker": models.OPUS, "advisor": models.SONNET, "mode": "delegate"},
+    # Plan-then-Execute: 강한 모델(Fable)이 계획, 약한 모델(Haiku)이 실행.
+    {"key": "plan-fable-haiku", "worker": models.HAIKU, "advisor": models.FABLE, "mode": "delegate"},
 ]
 
 

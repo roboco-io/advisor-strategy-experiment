@@ -161,9 +161,9 @@ DELEG_WORKER_PROMPT = (
 MAX_DELEG_ROUNDS = 3  # Advisor가 조기 종료해도 검증·재위임 기회를 준다.
 
 DELEGATOR_INSTRUCTIONS = (
-    "You are the Advisor and you OWN this loop. Do NOT write code yourself. Delegate ALL "
-    "implementation to the `worker` subagent (Opus) by calling the Agent/Task tool with "
-    "subagent_type \"worker\".\n"
+    "You are the planner and you OWN this loop. Do NOT write code yourself. Produce the plan, "
+    "then delegate ALL implementation to the `worker` subagent by calling the Agent/Task tool "
+    "with subagent_type \"worker\".\n"
     "CRITICAL — run the worker SYNCHRONOUSLY: wait for the worker's full completion report in "
     "the SAME turn. Do NOT run it in the background, do NOT say you will be notified later, and "
     "do NOT end your turn while the worker is still running. Give it a complete brief: build all "
@@ -186,26 +186,29 @@ DELEGATOR_CONTINUE = (
 def build_delegator_options(
     advisor_model, worker_model, workdir, max_turns: int = 40
 ) -> ClaudeAgentOptions:
-    """루프 오너(Advisor) 세션 옵션. Advisor는 위임(Agent)·검증(Bash/Read/Grep/Glob)만,
-    구현(Write/Edit)은 worker 서브에이전트가 수행."""
-    return ClaudeAgentOptions(
-        model=models.ALIAS.get(advisor_model, advisor_model),
-        cwd=str(workdir),
-        permission_mode="bypassPermissions",
-        max_turns=max_turns,
-        setting_sources=[],
-        allowed_tools=["Agent", "Task", "Bash", "Read", "Grep", "Glob"],
-        disallowed_tools=["Skill"],
-        agents={
+    """루프 오너(planner) 세션 옵션. planner는 위임(Agent/Task)·검증(Bash/Read/Grep/Glob)만,
+    구현(Write/Edit)은 worker(executor) 서브에이전트가 수행."""
+    kwargs = {
+        "model": models.ALIAS.get(advisor_model, advisor_model),
+        "cwd": str(workdir),
+        "permission_mode": "bypassPermissions",
+        "max_turns": max_turns,
+        "setting_sources": [],
+        "allowed_tools": ["Agent", "Task", "Bash", "Read", "Grep", "Glob"],
+        "disallowed_tools": ["Skill"],
+        "agents": {
             "worker": AgentDefinition(
-                description="Opus implementation worker",
+                description="Implementation worker (executor)",
                 prompt=DELEG_WORKER_PROMPT,
                 tools=list(BASE_TOOLS),
                 model=models.ALIAS.get(worker_model, worker_model),
                 permissionMode="bypassPermissions",
             )
         },
-    )
+    }
+    if advisor_model == models.FABLE:  # Fable planner의 refusal 대비
+        kwargs["fallback_model"] = models.ALIAS[models.OPUS]
+    return ClaudeAgentOptions(**kwargs)
 
 
 async def run_delegator(

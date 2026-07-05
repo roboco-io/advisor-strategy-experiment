@@ -56,6 +56,15 @@ def test_build_delegator_options():
     assert "worker" in o.agents  # Opus 구현 서브에이전트
     assert o.agents["worker"].model == "opus"
     assert o.agents["worker"].permissionMode == "bypassPermissions"  # 헤드리스 정지 방지
+    assert o.fallback_model is None  # Sonnet 플래너는 fallback 없음
+
+
+def test_build_delegator_options_fable_planner_haiku_executor():
+    # Plan-then-Execute: Fable 플래너 + Haiku 실행자
+    o = W.build_delegator_options(models.FABLE, models.HAIKU, "/tmp/wd")
+    assert o.model == "fable"
+    assert o.agents["worker"].model == "haiku"
+    assert o.fallback_model == "opus"  # Fable refusal 대비
 
 
 def test_accumulate_separates_worker_and_advisor():

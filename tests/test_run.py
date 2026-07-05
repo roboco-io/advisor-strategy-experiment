@@ -5,7 +5,7 @@ from harness import models
 def test_arms_defined():
     keys = {a["key"] for a in R.ARMS}
     assert keys == {"haiku-solo", "sonnet-solo", "fable-solo", "haiku+fable",
-                    "sonnet+fable", "opus-solo", "deleg-opus"}
+                    "sonnet+fable", "opus-solo", "deleg-opus", "plan-fable-haiku"}
     hf = next(a for a in R.ARMS if a["key"] == "haiku+fable")
     assert hf["worker"] == models.HAIKU and hf["advisor"] == models.FABLE
     hs = next(a for a in R.ARMS if a["key"] == "haiku-solo")
@@ -18,6 +18,10 @@ def test_opus_and_delegate_arms_defined():
     dg = next(a for a in R.ARMS if a["key"] == "deleg-opus")
     assert dg["worker"] == models.OPUS and dg["advisor"] == models.SONNET
     assert dg["mode"] == "delegate"
+    # Plan-then-Execute: Fable 플래너 + Haiku 실행자
+    pf = next(a for a in R.ARMS if a["key"] == "plan-fable-haiku")
+    assert pf["worker"] == models.HAIKU and pf["advisor"] == models.FABLE
+    assert pf["mode"] == "delegate"
 
 
 def test_drive_worker_routes_delegate(monkeypatch):
