@@ -123,3 +123,57 @@ uv run python -m harness.run --arms opus-solo,deleg-opus --n 5 \
 ```
 
 워킹스타일 규율은 `CLAUDE.md`(§모델 역할 분담)와 `.claude/agents/worker.md`(model: opus)에 고정.
+
+---
+
+## §Plan-then-Execute — model-splitting (plan-fable-haiku)
+
+개발동생 위임 방식은 본질적으로 **Plan-then-Execute** 패턴이다: 강한 플래너가 전역 계획을
+수립하고, 값싼 실행자가 단계별로 실행한다(계보: Plan-and-Solve ACL 2023 · BabyAGI · LangChain
+Plan-and-Execute · ReWOO; Anthropic의 Advisor/orchestrator-worker와 정렬). 이를 **강한 모델=계획,
+약한 모델=실행**의 model-splitting으로 순수 검증한 arm이 `plan-fable-haiku`(Fable 계획 → Haiku 실행)다.
+
+### 전체 8-arm 결과
+
+| Arm | 구조 | 합격률(per-run) | pass 범위 | 회당 비용 |
+|---|---|---|---|---|
+| haiku-solo | Haiku 단독 | 46.4 ± 6.0% | 78–154 | $0.22 |
+| haiku+fable | Fable 조언→Haiku | 48.0 ± 2.2% | 115–158 | $0.95 |
+| sonnet-solo | Sonnet 단독 | 48.3 ± 2.0% | 125–150 | $0.60 |
+| **sonnet+fable** | Fable 조언→Sonnet | **50.7 ± 2.1%** | 125–153 | $1.84 |
+| fable-solo | Fable 단독 | 45.1 ± 1.3% | 116–127 | $1.23 |
+| **opus-solo** | Opus 단독 | 48.8 ± 2.3% | 125–151 | $0.56 |
+| deleg-opus | Sonnet 계획→Opus 실행 | 47.3 ± 0.8% | 125–140 | $2.24 |
+| **plan-fable-haiku** | Fable 계획→Haiku 실행 | 49.1 ± 1.8% | 122–147 | $2.94 |
+
+### 판정
+
+| 비교 | 합격률 | 비용 |
+|---|---|---|
+| haiku-solo → plan-fable-haiku | 46.4% → 49.1% (**+2.7pp**) | 13배 |
+| fable-solo → plan-fable-haiku | 45.1% → 49.1% (**+4.0pp**) | 2.4배 |
+| deleg-opus → plan-fable-haiku | 47.3% → 49.1% (+1.8pp) | 더 저렴 |
+
+1. **Plan-then-Execute는 품질을 실제로 올린다 — 8개 중 2위(49.1%).** Fable 계획이 Haiku를
+   solo 대비 +2.7pp 끌어올렸고 분산도 6.0→1.8pp로 축소. model-splitting 가설이 자율 벤치마크에서도 성립.
+
+2. **강한 모델은 실행자보다 플래너로 써라.** Fable이 다 하는 `fable-solo`(45.1%)보다 **Fable이
+   계획만 하고 Haiku가 실행**한 경우(49.1%)가 **+4.0pp 높다**. 강한 모델의 강점은 전역 설계에 있다.
+
+3. **플래너 강도 > 실행자 강도.** `plan-fable-haiku`(Fable계획+Haiku실행, 49.1%)가
+   `deleg-opus`(Sonnet계획+Opus실행, 47.3%)보다 높다 — 약한 실행자라도 강한 플래너가 있으면
+   강한 실행자+약한 플래너를 이긴다.
+
+4. **그러나 비용이 발목.** Fable 플래너 토큰($10/$50)이 비싸 회당 $2.94로 최고. haiku-solo 대비
+   +2.7pp에 13배. 절대 가성비 승자는 여전히 `opus-solo`(48.8%, $0.56).
+
+**종합**: Plan-then-Execute의 품질 효과는 실재하고 "강한 모델 단독"보다도 낫지만(Fable 기준),
+강한 플래너의 토큰값 때문에 절대 가성비에선 저렴한 강한 모델 단독에 밀린다. 저렴한 플래너
+(예: Sonnet/Haiku 계획)로 갈수록 가성비는 오르나 품질 이득은 줄어드는 트레이드오프.
+
+### 재현
+
+```bash
+uv run python -m harness.run --arms plan-fable-haiku --n 5 \
+  --collection tasks/Conduit.postman_collection.json --results-dir results --max-turns 40
+```
