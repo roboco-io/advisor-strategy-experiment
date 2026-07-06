@@ -177,3 +177,59 @@ Plan-and-Execute · ReWOO; Anthropic의 Advisor/orchestrator-worker와 정렬). 
 uv run python -m harness.run --arms plan-fable-haiku --n 5 \
   --collection tasks/Conduit.postman_collection.json --results-dir results --max-turns 40
 ```
+
+---
+
+## §Plan-then-Execute 플래너 3종 비교 (plan-opus-sonnet 추가)
+
+`plan-opus-sonnet`(Opus 계획 → Sonnet 실행)을 추가해 플래너 강도 스펙트럼을 채웠다. **부팅 실패를
+낸 유일한 arm**이라 부팅률과 품질을 분리해 본다.
+
+### 9-arm 전체 (부팅률·실질품질)
+
+| Arm | 구조 | 부팅 | 합격률(부팅런) | 실질%(실패=0) | 비용 |
+|---|---|---|---|---|---|
+| haiku-solo | Haiku 단독 | 5/5 | 46.4 ± 6.0% | 46.4 | $0.22 |
+| haiku+fable | Fable 조언→Haiku | 5/5 | 48.0 ± 2.2% | 48.0 | $0.95 |
+| sonnet-solo | Sonnet 단독 | 5/5 | 48.3 ± 2.0% | 48.3 | $0.60 |
+| **sonnet+fable** | Fable 조언→Sonnet | 5/5 | **50.7 ± 2.1%** | 50.7 | $1.84 |
+| fable-solo | Fable 단독 | 5/5 | 45.1 ± 1.3% | 45.1 | $1.23 |
+| **opus-solo** | Opus 단독 | 5/5 | 48.8 ± 2.3% | 48.8 | $0.56 |
+| deleg-opus | Sonnet 계획→Opus 실행 | 5/5 | 47.3 ± 0.8% | 47.3 | $2.24 |
+| **plan-fable-haiku** | Fable 계획→Haiku 실행 | 5/5 | 49.1 ± 1.8% | 49.1 | $2.94 |
+| plan-opus-sonnet | Opus 계획→Sonnet 실행 | **3/5** | 46.6 ± 1.6% | **28.0** | $1.48 |
+
+### 플래너 3종 (부팅런 기준)
+
+| 플래너 → 실행자 | 부팅 | 합격률 | 비용 |
+|---|---|---|---|
+| Fable → Haiku | 5/5 | **49.1%** | $2.94 |
+| Sonnet → Opus | 5/5 | 47.3% | $2.24 |
+| Opus → Sonnet | **3/5** | 46.6% | $1.48 |
+
+### 판정 (앞 절 결론의 갱신)
+
+1. **`plan-opus-sonnet`은 신뢰성이 무너졌다 — 부팅 5회 중 2회 실패(40%).** 위임 자체는 정상
+   (Opus·Sonnet 모두 소환)이었으나 Sonnet 실행자가 부팅 안 되는 서버를 만들었다. 실패를 0점으로
+   반영한 실질 품질은 **28.0%로 전 arm 최저**. (다른 8개 arm은 45회 중 0회 실패 — 대비가 뚜렷하다.)
+
+2. **"강한 플래너 = 더 좋다"는 단순 명제는 깨졌다.** 가장 강한 Opus 플래너가 Fable은 물론 Sonnet
+   플래너도 못 이겼다(부팅런 46.6%). 앞 절의 "플래너 강도 > 실행자 강도"는 **Fable이 유독 뛰어난
+   플래너**이거나 Fable→Haiku 조합이 유독 견고했던 것으로 재해석해야 한다.
+
+3. **실행자의 "계획→작동 코드" 역량이 신뢰성을 좌우한다.** 같은 Plan-then-Execute라도 Opus→Sonnet은
+   부팅 실패, Fable→Haiku·Sonnet→Opus는 5/5 성공. 플래너 못지않게 실행자가 계획을 실제 작동 코드로
+   옮기는 능력이 결과를 가른다.
+
+4. **가성비·품질 종합 승자는 변함없이 `opus-solo`(48.8%, $0.56).** Plan-then-Execute 3종 모두 이를
+   넘지 못했다.
+
+> ⚠️ N=5라 40% 부팅 실패가 노이즈일 여지는 있으나, 다른 8개 arm이 45회 중 0회 실패한 것과 대비되어
+> 실재 신뢰성 문제로 판단한다. 정밀 추정엔 더 큰 N 필요.
+
+### 재현
+
+```bash
+uv run python -m harness.run --arms plan-opus-sonnet --n 5 \
+  --collection tasks/Conduit.postman_collection.json --results-dir results --max-turns 40
+```

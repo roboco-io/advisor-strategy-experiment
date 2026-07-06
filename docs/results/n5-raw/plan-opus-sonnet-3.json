@@ -1,0 +1,41 @@
+{
+  "arm": "plan-opus-sonnet",
+  "total_cost": 1.417012,
+  "by_model": {
+    "claude-haiku-4-5": {
+      "input_tokens": 4470,
+      "output_tokens": 63,
+      "cache_read": 0,
+      "cache_write": 0,
+      "calls": 3
+    },
+    "claude-opus-4-8": {
+      "input_tokens": 5212,
+      "output_tokens": 16608,
+      "cache_read": 415351,
+      "cache_write": 49621,
+      "calls": 3
+    },
+    "claude-sonnet-4-6": {
+      "input_tokens": 42,
+      "output_tokens": 15738,
+      "cache_read": 302290,
+      "cache_write": 33674,
+      "calls": 3
+    }
+  },
+  "advisor_calls": 0,
+  "worker_turns": 10,
+  "refusals": [],
+  "wall_clock_s": 187.62,
+  "sdk_cost_usd": 1.603091,
+  "fallback_used": false,
+  "grade": {
+    "server_ok": false,
+    "total": 0,
+    "passed": 0,
+    "failures": [
+      "server did not boot"
+    ]
+  }
+}
