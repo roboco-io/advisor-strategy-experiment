@@ -1,0 +1,34 @@
+{
+  "arm": "plan-opus-haiku",
+  "total_cost": 0.843628,
+  "by_model": {
+    "claude-haiku-4-5": {
+      "input_tokens": 4542,
+      "output_tokens": 15244,
+      "cache_read": 136755,
+      "cache_write": 18868,
+      "calls": 3
+    },
+    "claude-opus-4-8": {
+      "input_tokens": 3917,
+      "output_tokens": 13332,
+      "cache_read": 326479,
+      "cache_write": 33517,
+      "calls": 3
+    }
+  },
+  "advisor_calls": 0,
+  "worker_turns": 10,
+  "refusals": [],
+  "wall_clock_s": 160.14,
+  "sdk_cost_usd": 0.969317,
+  "fallback_used": false,
+  "grade": {
+    "server_ok": false,
+    "total": 0,
+    "passed": 0,
+    "failures": [
+      "server did not boot"
+    ]
+  }
+}

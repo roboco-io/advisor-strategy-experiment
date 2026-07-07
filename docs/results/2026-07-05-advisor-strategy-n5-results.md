@@ -1,8 +1,9 @@
 # Advisor Strategy — RealWorld 실험 결과 (N=5)
 
-> 실행일: 2026-07-05 · 35회(7 arm × 5 반복) · exit 0 · 원본: [`n5-raw/`](n5-raw/)
-> ※ 아래 §1~4는 초기 5 arm 분석. 강한 워커(opus-solo)와 개발동생 위임 방식(deleg-opus)은
-> 문서 하단 **§개발동생 위임 방식** 참조.
+> 실행일: 2026-07-05~08 · 50회(10 arm × 5 반복) · 원본: [`n5-raw/`](n5-raw/)
+> ※ 본문은 실험 진행 순서대로 누적된 기록이다: §1~4(초기 5 arm) → §개발동생 위임 방식
+> (opus-solo·deleg-opus) → §Plan-then-Execute(plan-fable-haiku → 플래너 3종 → **Opus 플래너
+> 분리 검증**). 최종 결론은 마지막 절이 우선한다.
 
 ## 요약
 
@@ -232,5 +233,57 @@ uv run python -m harness.run --arms plan-fable-haiku --n 5 \
 
 ```bash
 uv run python -m harness.run --arms plan-opus-sonnet --n 5 \
+  --collection tasks/Conduit.postman_collection.json --results-dir results --max-turns 40
+```
+
+---
+
+## §Opus 플래너 분리 검증 (plan-opus-haiku, 2026-07-08)
+
+`plan-opus-sonnet`의 부팅 실패(2/5)가 **플래너 탓인지 실행자 궁합 탓인지** 분리하기 위해
+실행자만 Haiku로 바꾼 `plan-opus-haiku`(Opus 계획 → Haiku 실행)를 추가했다.
+
+### 결과 (N=5)
+
+| 지표 | 값 |
+|---|---|
+| 부팅 | **3/5** (2회 실패, plan-opus-sonnet과 동일) |
+| 합격률(부팅런) | 44.4 ± 4.2% |
+| 실질%(실패=0) | **26.7%** (전 arm 최저) |
+| 회당 비용 | $1.09 |
+
+### 플래너 4종 최종 비교
+
+| 플래너 → 실행자 | 부팅 | 부팅런 합격률 | 실질% |
+|---|---|---|---|
+| Fable → Haiku | **5/5** | **49.1%** | 49.1 |
+| Sonnet → Opus | **5/5** | 47.3% | 47.3 |
+| Opus → Sonnet | 3/5 | 46.6% | 28.0 |
+| Opus → Haiku | 3/5 | 44.4% | 26.7 |
+
+### 판정 — 앞 절 결론의 교체
+
+1. **부팅 실패는 실행자가 아니라 Opus 플래너를 따라다닌다.** 같은 Haiku 실행자로 Fable 계획은
+   5/5, Opus 계획은 3/5. 실행자를 바꿔도(Sonnet↔Haiku) Opus 플래너는 똑같이 2회 실패 —
+   **Opus 플래너 10회 중 4회 실패, Fable·Sonnet 플래너는 10회 중 0회.**
+
+2. **앞 절의 "실행자의 계획→작동 코드 역량이 신뢰성을 좌우한다"(§플래너 3종 판정 3)는 기각.**
+   실행자 무관하게 실패가 재현됐으므로, **Opus가 만드는 계획 자체가 부팅까지 도달하기 어려운
+   형태**(과도한 복잡성 또는 불완전한 마무리 지시로 추정)라는 해석이 유력하다.
+
+3. **나쁜 계획은 없느니만 못하다.** Opus 계획을 받은 Haiku는 부팅된 런에서도 44.4%로
+   **haiku-solo(46.4%)보다 낮다.** Fable 계획은 같은 Haiku를 +2.7pp 끌어올렸다(49.1%) —
+   플래너의 가치는 모델 등급이 아니라 **실행 가능한 계획을 쓰는 능력**에서 나오고, 이 과제에선
+   Fable만 그것을 해냈다.
+
+4. **실질 품질 최종 서열**: Fable 플래너(49.1) ≫ Sonnet 플래너(47.3) ≫ Opus 플래너(26.7~28.0,
+   신뢰성 붕괴).
+
+> ⚠️ N=5 × 2 조합이지만 Opus 플래너 실패 4/10 vs 타 플래너 0/10의 대비는 우연으로 보기 어렵다.
+
+### 재현
+
+```bash
+uv run python -m harness.run --arms plan-opus-haiku --n 5 \
   --collection tasks/Conduit.postman_collection.json --results-dir results --max-turns 40
 ```
